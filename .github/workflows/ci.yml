@@ -20,18 +20,12 @@ jobs:
         with:
           node-version: "22.x"
 
-      - name: Set version
+      - name: set version
         id: set_version
         run: |
-          # Read version from existing file
-          if [ -f "public/version.json" ]; then
-            version=$(jq -r '.version' public/version.json)
-            echo "Using existing version: $version"
-            echo "version=$version" >> "$GITHUB_OUTPUT"
-          else
-            echo "Error: version.json file not found in public directory"
-            exit 1
-          fi
+          version=$(date +'%Y%m%d.%H%M%S')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          printf '{"version": "%s" }' "$version" > public/version.json
 
       - name: Build
         run: |
