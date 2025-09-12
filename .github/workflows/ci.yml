@@ -18,14 +18,20 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: "22.x"
 
-      - name: set version
+      - name: Set version
         id: set_version
         run: |
-          version=$(date +'%Y%m%d.%H%M%S')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          printf '{"version": "%s" }' "$version" > public/version.json
+          # Read version from existing file
+          if [ -f "public/version.json" ]; then
+            version=$(jq -r '.version' public/version.json)
+            echo "Using existing version: $version"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          else
+            echo "Error: version.json file not found in public directory"
+            exit 1
+          fi
 
       - name: Build
         run: |
