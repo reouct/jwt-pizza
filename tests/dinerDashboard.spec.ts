@@ -106,8 +106,8 @@ test.describe("DinerDashboard", () => {
     // Avatar image present
     await expect(page.locator('img[alt="Employee stock photo"]')).toBeVisible();
 
-    // User fields
-    const infoGrid = page.locator(".grid");
+    // User fields - target the main info grid (has orange text classes) to avoid modal inputs
+    const infoGrid = page.locator(".text-orange-200.grid");
     await expect(infoGrid).toContainText("name:");
     await expect(infoGrid).toContainText(dinerUser.name);
     await expect(infoGrid).toContainText("email:");
@@ -144,7 +144,8 @@ test.describe("DinerDashboard", () => {
 
     await gotoDashboard(page);
 
-    const roleCell = page.locator(".grid .col-span-4").last();
+    // limit to the main info grid so we don't select inputs inside the edit modal
+    const roleCell = page.locator(".text-orange-200.grid .col-span-4").last();
     await expect(roleCell).toContainText("diner");
     await expect(roleCell).toContainText("Franchisee on fr-99");
   });
@@ -156,7 +157,7 @@ test.describe("DinerDashboard", () => {
     await gotoDashboard(page);
 
     // Should still show name/email and role label, but no roles text beyond maybe blank
-    const infoGrid = page.locator(".grid");
+    const infoGrid = page.locator(".text-orange-200.grid");
     await expect(infoGrid).toContainText(noRoleUser.name);
     await expect(infoGrid).toContainText(noRoleUser.email);
     // Role line exists but doesn't throw / break; we just ensure page renders
