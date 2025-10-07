@@ -14,6 +14,7 @@ import FranchiseDashboard from "../views/franchiseDashboard";
 import History from "../views/history";
 import AdminDashboard from "../views/adminDashboard";
 import DinerDashboard from "../views/dinerDashboard";
+import ListUsers from "../views/listUsers";
 import CreateStore from "../views/createStore";
 import CreateFranchise from "../views/createFranchise";
 import CloseFranchise from "../views/closeFranchise";
@@ -90,6 +91,13 @@ export default function App() {
       component: <AdminDashboard user={user} />,
       constraints: [isAdmin],
       display: ["nav"],
+    },
+    {
+      title: "List Users",
+      to: "/admin-dashboard/list-users",
+      component: <ListUsers />,
+      constraints: [isAdmin],
+      display: [],
     },
     {
       title: "Create franchise",

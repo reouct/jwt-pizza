@@ -128,6 +128,12 @@ class HttpPizzaService implements PizzaService {
       `/api/franchise?page=${page}&limit=${limit}&name=${nameFilter}`
     );
   }
+  // need to implement the backend logic here.
+  async getUsers(page: number = 0, limit: number = 10): Promise<any> {
+    // Convert 0-based frontend page to 1-based backend page
+    const backendPage = page + 1;
+    return this.callEndpoint(`/api/user?page=${backendPage}&limit=${limit}`);
+  }
 
   async closeFranchise(franchise: Franchise): Promise<void> {
     return this.callEndpoint(`/api/franchise/${franchise.id}`, "DELETE");

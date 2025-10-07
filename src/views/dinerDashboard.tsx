@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import View from "./view";
 import { pizzaService } from "../service/service";
 import { Order, OrderHistory, Role, User } from "../service/pizzaService";
@@ -14,6 +14,7 @@ interface Props {
 
 export default function DinerDashboard(props: Props) {
   const user = props.user || ({} as User);
+  const navigate = useNavigate();
   const [orders, setOrders] = React.useState<Order[]>([]);
   const nameRef = React.useRef<HTMLInputElement>(null);
   const emailRef = React.useRef<HTMLInputElement>(null);
@@ -62,13 +63,22 @@ export default function DinerDashboard(props: Props) {
             src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=facearea&facepad=2&w=300&h=300&q=80"
             alt="Employee stock photo"
           />
-          <Button
-            title="Edit"
-            className="w-16 p-0"
-            onPress={() =>
-              HSOverlay.open(document.getElementById("hs-jwt-modal")!)
-            }
-          />
+          <div className="inline-flex items-center gap-2">
+            <Button
+              title="Edit"
+              className="w-16 p-0"
+              onPress={() =>
+                HSOverlay.open(document.getElementById("hs-jwt-modal")!)
+              }
+            />
+            {Role.isRole(props.user, Role.Admin) && (
+              <Button
+                title="List"
+                className="w-16 p-0"
+                onPress={() => navigate("/admin-dashboard/list-users")}
+              />
+            )}
+          </div>
         </div>
 
         <div className="my-4 text-lg text-orange-200 text-start grid grid-cols-5 gap-2">
@@ -116,12 +126,6 @@ export default function DinerDashboard(props: Props) {
                               scope="col"
                               className="px-6 py-3 text-start text-xs sm:text-sm font-medium"
                             >
-                              ID
-                            </th>
-                            <th
-                              scope="col"
-                              className="px-6 py-3 text-start text-xs sm:text-sm font-medium"
-                            >
                               Price
                             </th>
                             <th
@@ -159,6 +163,7 @@ export default function DinerDashboard(props: Props) {
           </>
         )}
       </div>
+      {/* ...List button moved next to Edit button above... */}
       <div
         role="dialog"
         aria-modal="true"
