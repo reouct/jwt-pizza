@@ -129,10 +129,24 @@ class HttpPizzaService implements PizzaService {
     );
   }
   // need to implement the backend logic here.
-  async getUsers(page: number = 0, limit: number = 10): Promise<any> {
+  async getUsers(
+    page: number = 0,
+    limit: number = 10,
+    nameFilter?: string
+  ): Promise<any> {
     // Convert 0-based frontend page to 1-based backend page
     const backendPage = page + 1;
-    return this.callEndpoint(`/api/user?page=${backendPage}&limit=${limit}`);
+    let url = `/api/user?page=${backendPage}&limit=${limit}`;
+
+    // Add name filter if provided - use wildcard for partial matching
+    if (nameFilter && nameFilter.trim()) {
+      const searchTerm = nameFilter.trim();
+      // Add wildcards for partial matching: *searchterm*
+      const wildcardSearch = `*${searchTerm}*`;
+      url += `&name=${encodeURIComponent(wildcardSearch)}`;
+    }
+
+    return this.callEndpoint(url);
   }
 
   async closeFranchise(franchise: Franchise): Promise<void> {

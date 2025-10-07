@@ -122,7 +122,7 @@ interface PizzaService {
   closeFranchise(franchise: Franchise): Promise<void>;
   createStore(franchise: Franchise, store: Store): Promise<Store>;
   closeStore(franchise: Franchise, store: Store): Promise<null>;
-  getUsers(page: number, limit: number): Promise<UserList>;
+  getUsers(page: number, limit: number, nameFilter?: string): Promise<UserList>;
   docs(docType: string): Promise<Endpoints>;
   updateUser(user: User): Promise<User>;
 }

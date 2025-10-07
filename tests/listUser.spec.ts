@@ -318,4 +318,91 @@ test.describe("Diner Dashboard", () => {
     const idCell = page.locator("tbody tr").first().locator("td").first();
     await expect(idCell).toHaveText("4");
   });
+
+  test("search with no results shows empty state", async ({ page }) => {
+    await mockUser(page, adminUser);
+
+    // Mock search for "nonexistent" - should return empty results
+    await page.route(
+      /\/api\/user\?page=1&limit=10&name=%2Anonexistent%2A$/,
+      async (route: Route) => {
+        await route.fulfill({
+          json: {
+            users: [],
+            more: false,
+          },
+        });
+      }
+    );
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Type in search box
+    const searchBox = page.locator('input[placeholder*="Search by name"]');
+    await searchBox.fill("nonexistent");
+
+    // Wait for debounced search
+    await page.waitForTimeout(500);
+
+    // Should show "No users to display" message
+    const emptyMessage = page.locator("text=No users to display");
+    await expect(emptyMessage).toBeVisible();
+
+    // Check that filter indicator is shown
+    const filterIndicator = page.locator('text=(Filtered by: "nonexistent")');
+    await expect(filterIndicator).toBeVisible();
+  });
+
+  test("clearing search reloads all users", async ({ page }) => {
+    await mockUser(page, adminUser);
+
+    // Mock initial load (all users)
+    await page.route(/\/api\/user\?page=1&limit=10$/, async (route: Route) => {
+      await route.fulfill({
+        json: {
+          users: usersPage1,
+          more: true,
+        },
+      });
+    });
+
+    // Mock search results
+    await page.route(
+      /\/api\/user\?page=1&limit=10&name=%2Aadmin%2A$/,
+      async (route: Route) => {
+        await route.fulfill({
+          json: {
+            users: [adminUser],
+            more: false,
+          },
+        });
+      }
+    );
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    const searchBox = page.locator('input[placeholder*="Search by name"]');
+
+    // Search for "admin"
+    await searchBox.fill("admin");
+    await page.waitForTimeout(500);
+
+    // Should show 1 result
+    let rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(1);
+
+    // Clear search
+    await searchBox.clear();
+    await page.waitForTimeout(500);
+
+    // Should show all users again
+    rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(10);
+
+    // Filter indicator should be gone
+    const filterIndicator = page.locator("text=(Filtered by:");
+    await expect(filterIndicator).toHaveCount(0);
+  });
 });

@@ -8,16 +8,22 @@ export default function ListUsers() {
   const [page, setPage] = React.useState(0);
   const [users, setUsers] = React.useState<User[]>([]);
   const [more, setMore] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
 
   React.useEffect(() => {
     // Try to fetch from the backend. If backend isn't available, fall back to empty list.
     (async () => {
       try {
-        const r: UserList = await pizzaService.getUsers(page, 10);
+        const r: UserList = await pizzaService.getUsers(
+          page,
+          10,
+          debouncedSearchTerm
+        );
         console.log(
           `Page ${page}: received ${r.users?.length || 0} users, more: ${
             r.more
-          }`
+          }${debouncedSearchTerm ? `, search: "${debouncedSearchTerm}"` : ""}`
         );
         setUsers(r.users || []);
         setMore(!!r.more);
@@ -28,15 +34,48 @@ export default function ListUsers() {
         setMore(false);
       }
     })();
-  }, [page]);
+  }, [page, debouncedSearchTerm]);
+
+  // Debounce search term to avoid excessive API calls
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // Wait 300ms after user stops typing
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset to first page when search term changes
+  React.useEffect(() => {
+    if (page !== 0) {
+      setPage(0);
+    }
+  }, [debouncedSearchTerm]);
 
   return (
     <View title="Users">
       <div className="text-start py-8 px-4 sm:px-6 lg:px-8">
         <h3 className="text-neutral-100 text-xl mb-4">Users</h3>
+
+        {/* Search Bar */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search by name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
         <div className="bg-neutral-100 overflow-clip my-4">
           <div className="px-4 py-2 text-sm text-neutral-300">
             Page {page + 1}
+            {debouncedSearchTerm && (
+              <span className="ml-2 text-blue-600">
+                (Filtered by: "{debouncedSearchTerm}")
+              </span>
+            )}
           </div>
           <div className="flex flex-col">
             <div className="-m-1.5 overflow-x-auto">
