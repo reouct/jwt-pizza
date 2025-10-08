@@ -149,6 +149,44 @@ test.describe("Diner Dashboard", () => {
     });
   }
 
+  // Helper to mock DELETE /api/user/:userId
+  async function deleteUser(
+    page: Page,
+    userId: number | string,
+    options: { status?: number; delayMs?: number; responseBody?: any } = {}
+  ) {
+    const { status = 200, delayMs = 0, responseBody } = options;
+    const routePattern = new RegExp(`/api/user/${userId}$`);
+
+    await page.route(routePattern, async (route: Route) => {
+      // Only handle DELETE, let other methods pass through
+      if (route.request().method() !== "DELETE") {
+        try {
+          await route.continue();
+        } catch {
+          // If no backend exists, ignore
+          await route.fulfill({ status: 404 });
+        }
+        return;
+      }
+
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      const fulfill: any = { status };
+      if (responseBody !== undefined) {
+        if (typeof responseBody === "string") {
+          fulfill.body = responseBody;
+        } else {
+          fulfill.json = responseBody;
+        }
+      }
+
+      await route.fulfill(fulfill);
+    });
+  }
+
   test("shows List button for admin users", async ({ page }) => {
     await mockUser(page, adminUser);
 
@@ -404,5 +442,306 @@ test.describe("Diner Dashboard", () => {
     // Filter indicator should be gone
     const filterIndicator = page.locator("text=(Filtered by:");
     await expect(filterIndicator).toHaveCount(0);
+  });
+
+  test("displays delete button for each user", async ({ page }) => {
+    await mockUser(page, adminUser);
+    await listUser(page, [adminUser, nonAdminUser], false, 0);
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Check that Actions header is present
+    const actionsHeader = page.locator("th").last();
+    await expect(actionsHeader).toHaveText("Actions");
+
+    // Check that delete buttons are present for each user
+    const deleteButtons = page.getByRole("button", { name: "Delete" });
+    await expect(deleteButtons).toHaveCount(2);
+
+    // Check that buttons are enabled
+    const firstDeleteButton = deleteButtons.first();
+    await expect(firstDeleteButton).toBeEnabled();
+  });
+
+  test("successfully deletes a user", async ({ page }) => {
+    await mockUser(page, adminUser);
+
+    // Track the number of calls to the main endpoint
+    let callCount = 0;
+    await page.route(/\/api\/user\?page=1&limit=10$/, async (route: Route) => {
+      callCount++;
+      if (callCount === 1) {
+        // Initial load: 3 users
+        await route.fulfill({
+          json: {
+            users: [adminUser, nonAdminUser, User2],
+            more: false,
+          },
+        });
+      } else {
+        // Refresh after delete: 2 users (nonAdminUser removed)
+        await route.fulfill({
+          json: {
+            users: [adminUser, User2],
+            more: false,
+          },
+        });
+      }
+    });
+
+    // Mock delete API call using helper (return JSON so callEndpoint can parse)
+    await deleteUser(page, 2, { status: 200, responseBody: {} });
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Initially should have 3 users
+    let rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(3);
+
+    // Auto-confirm the deletion dialog
+    await page.evaluate(() => {
+      window.confirm = () => true;
+    });
+
+    // Click delete button for the second user (nonAdminUser)
+    const deleteButtons = page.getByRole("button", { name: "Delete" });
+    const secondDeleteButton = deleteButtons.nth(1);
+
+    // Wait for the refresh API call to happen after delete
+    const refreshResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/user?page=1&limit=10") &&
+        response.request().method() === "GET"
+    );
+
+    await secondDeleteButton.click();
+
+    // Wait for both delete and refresh to complete
+    await refreshResponsePromise;
+    await page.waitForTimeout(500); // Small buffer for UI to update
+
+    // Should now have 2 users (nonAdminUser deleted)
+    rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+
+    // Verify the deleted user is no longer in the list
+    const userNames = await page
+      .locator("tbody tr td:nth-child(2)")
+      .allTextContents();
+    expect(userNames).not.toContain("Regular User");
+  });
+
+  test("shows confirmation dialog before deleting", async ({ page }) => {
+    await mockUser(page, adminUser);
+    await listUser(page, [adminUser, nonAdminUser], false, 0);
+
+    // Mock delete API - this should NOT be called since we're cancelling
+    await page.route(/\/api\/user\/1$/, async (route: Route) => {
+      if (route.request().method() === "DELETE") {
+        throw new Error(
+          "Delete API should not be called when confirmation is cancelled"
+        );
+      }
+    });
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Track confirmation dialog calls
+    await page.evaluate(() => {
+      const originalConfirm = window.confirm;
+      window.confirm = (message) => {
+        (window as any).confirmCalled = true;
+        (window as any).confirmMessage = message;
+        return false; // Cancel the deletion
+      };
+    });
+
+    // Click delete button
+    const deleteButton = page.getByRole("button", { name: "Delete" }).first();
+    await deleteButton.click();
+
+    // Check if confirmation was called
+    const wasConfirmCalled = await page.evaluate(
+      () => (window as any).confirmCalled
+    );
+    const confirmationMessage = await page.evaluate(
+      () => (window as any).confirmMessage
+    );
+
+    expect(wasConfirmCalled).toBe(true);
+    expect(confirmationMessage).toContain(
+      'Are you sure you want to delete user "Admin User"?'
+    );
+    expect(confirmationMessage).toContain("This action cannot be undone.");
+  });
+
+  test("cancels deletion when user clicks cancel", async ({ page }) => {
+    await mockUser(page, adminUser);
+    await listUser(page, [adminUser, nonAdminUser], false, 0);
+
+    // Mock delete API - this should NOT be called since we're cancelling
+    await page.route(/\/api\/user\/1$/, async (route: Route) => {
+      if (route.request().method() === "DELETE") {
+        throw new Error(
+          "Delete API should not be called when confirmation is cancelled"
+        );
+      }
+    });
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Mock confirmation to return false (cancel)
+    await page.evaluate(() => {
+      window.confirm = () => false;
+    });
+
+    // Initially should have 2 users
+    let rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+
+    // Click delete button
+    const deleteButton = page.getByRole("button", { name: "Delete" }).first();
+    await deleteButton.click();
+
+    // Wait a bit
+    await page.waitForTimeout(500);
+
+    // Should still have 2 users (deletion was cancelled)
+    rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+  });
+
+  test("shows loading state during deletion", async ({ page }) => {
+    await mockUser(page, adminUser);
+
+    // Mock initial load and refresh after delete
+    let isInitialLoad = true;
+    await page.route(/\/api\/user\?page=1&limit=10$/, async (route: Route) => {
+      if (isInitialLoad) {
+        isInitialLoad = false;
+        await route.fulfill({
+          json: {
+            users: [adminUser, nonAdminUser],
+            more: false,
+          },
+        });
+      } else {
+        // Refresh after delete (adminUser removed)
+        await route.fulfill({
+          json: {
+            users: [nonAdminUser],
+            more: false,
+          },
+        });
+      }
+    });
+
+    // Mock delete API with delay to simulate loading
+    await page.route(/\/api\/user\/1$/, async (route: Route) => {
+      if (route.request().method() === "DELETE") {
+        // Add delay to simulate slow network
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await route.fulfill({ status: 200 });
+      }
+    });
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Auto-confirm deletion
+    await page.evaluate(() => {
+      window.confirm = () => true;
+    });
+
+    // Click delete button for first user
+    const deleteButton = page.getByRole("button", { name: "Delete" }).first();
+    await deleteButton.click();
+
+    // Should show loading state
+    const deletingButton = page.getByRole("button", { name: "Deleting..." });
+    await expect(deletingButton).toBeVisible();
+    await expect(deletingButton).toBeDisabled();
+  });
+
+  test("handles delete API errors gracefully", async ({ page }) => {
+    await mockUser(page, adminUser);
+    await listUser(page, [adminUser, nonAdminUser], false, 0);
+
+    // Mock delete API to return error
+    await page.route(/\/api\/user\/1$/, async (route: Route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({ status: 500, body: "Server Error" });
+      }
+    });
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    // Track alert calls
+    await page.evaluate(() => {
+      (window as any).alertCalled = false;
+      (window as any).alertMessage = "";
+      window.alert = (message) => {
+        (window as any).alertCalled = true;
+        (window as any).alertMessage = message;
+      };
+      window.confirm = () => true;
+    });
+
+    // Initially should have 2 users
+    let rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+
+    // Click delete button
+    const deleteButton = page.getByRole("button", { name: "Delete" }).first();
+    await deleteButton.click();
+
+    // Wait for error handling
+    await page.waitForTimeout(1000);
+
+    // Should still have 2 users (deletion failed)
+    rows = await page.locator("tbody tr");
+    await expect(rows).toHaveCount(2);
+
+    // Check that error alert was shown
+    const alertCalled = await page.evaluate(() => (window as any).alertCalled);
+    const alertMessage = await page.evaluate(
+      () => (window as any).alertMessage
+    );
+
+    expect(alertCalled).toBe(true);
+    expect(alertMessage).toContain('Failed to delete user "Admin User"');
+    expect(alertMessage).toContain("Please try again.");
+  });
+
+  test("disables delete button for users without ID", async ({ page }) => {
+    await mockUser(page, adminUser);
+
+    // Create a user without ID
+    const userWithoutId = {
+      name: "User Without ID",
+      email: "noId@jwt.com",
+      roles: [{ role: "diner" }],
+    };
+
+    await listUser(page, [adminUser, userWithoutId], false, 0);
+
+    await page.goto("http://localhost:5173/admin-dashboard/list-users");
+    await page.waitForSelector("table");
+
+    const deleteButtons = page.getByRole("button", { name: "Delete" });
+    await expect(deleteButtons).toHaveCount(2);
+
+    // First button (adminUser with ID) should be enabled
+    const firstDeleteButton = deleteButtons.first();
+    await expect(firstDeleteButton).toBeEnabled();
+
+    // Second button (user without ID) should be disabled
+    const secondDeleteButton = deleteButtons.last();
+    await expect(secondDeleteButton).toBeDisabled();
   });
 });

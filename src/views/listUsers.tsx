@@ -10,6 +10,9 @@ export default function ListUsers() {
   const [more, setMore] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("");
+  const [deletingUserId, setDeletingUserId] = React.useState<string | null>(
+    null
+  );
 
   React.useEffect(() => {
     // Try to fetch from the backend. If backend isn't available, fall back to empty list.
@@ -52,6 +55,35 @@ export default function ListUsers() {
     }
   }, [debouncedSearchTerm]);
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete user "${userName}"? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingUserId(userId);
+    try {
+      await pizzaService.deleteUser(userId);
+      // Refresh the current page
+      const r: UserList = await pizzaService.getUsers(
+        page,
+        10,
+        debouncedSearchTerm
+      );
+      setUsers(r.users || []);
+      setMore(!!r.more);
+      console.log(`User ${userName} deleted successfully`);
+    } catch (e) {
+      console.error(`Failed to delete user ${userName}:`, e);
+      alert(`Failed to delete user "${userName}". Please try again.`);
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   return (
     <View title="Users">
       <div className="text-start py-8 px-4 sm:px-6 lg:px-8">
@@ -84,22 +116,24 @@ export default function ListUsers() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="uppercase text-neutral-100 bg-slate-400 border-b-2 border-gray-500">
                       <tr>
-                        {["ID", "Name", "Email", "Role"].map((header) => (
-                          <th
-                            key={header}
-                            scope="col"
-                            className="px-6 py-3 text-center text-xs font-medium"
-                          >
-                            {header}
-                          </th>
-                        ))}
+                        {["ID", "Name", "Email", "Role", "Actions"].map(
+                          (header) => (
+                            <th
+                              key={header}
+                              scope="col"
+                              className="px-6 py-3 text-center text-xs font-medium"
+                            >
+                              {header}
+                            </th>
+                          )
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {users.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={5}
                             className="px-6 py-10 text-center text-sm text-gray-600"
                           >
                             No users to display.
@@ -120,13 +154,32 @@ export default function ListUsers() {
                             <td className="px-6 py-4 whitespace-nowrap text-start text-xs sm:text-sm text-gray-800">
                               {u.roles?.map((r) => r.role).join(", ")}
                             </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-center text-xs sm:text-sm">
+                              <Button
+                                title={
+                                  deletingUserId === u.id
+                                    ? "Deleting..."
+                                    : "Delete"
+                                }
+                                className={`px-3 py-1 text-xs ${
+                                  deletingUserId === u.id
+                                    ? "bg-gray-400 cursor-not-allowed"
+                                    : "bg-red-600 hover:bg-red-700 text-white"
+                                }`}
+                                disabled={deletingUserId === u.id || !u.id}
+                                onPress={() =>
+                                  u.id &&
+                                  handleDeleteUser(u.id, u.name || "Unknown")
+                                }
+                              />
+                            </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                     <tfoot>
                       <tr>
-                        <td colSpan={4} className="text-end py-2">
+                        <td colSpan={5} className="text-end py-2">
                           <Button
                             title="«"
                             className="w-12"
