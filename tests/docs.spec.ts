@@ -14,8 +14,8 @@ import type { Page, Route } from "@playwright/test";
  */
 
 test.describe("Docs Page", () => {
-  const SERVICE_BASE = "https://service.local";
-  const FACTORY_BASE = "https://factory.local";
+  const SERVICE_BASE = "https://pizza-service.reouct.click";
+  const FACTORY_BASE = "https://pizza-factory.cs329.click";
 
   const serviceDocs = {
     endpoints: [
